@@ -132,5 +132,4 @@ cython_debug/
 weights/
 
 # dataset folder
-data/kitti/
 data/kitti

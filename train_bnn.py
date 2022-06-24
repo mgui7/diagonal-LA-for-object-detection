@@ -43,6 +43,8 @@ parser.add_argument('--resume', default= PATH_TO_WEIGHTS, type=str,
                     help='Checkpoint state_dict file to resume training from')
 parser.add_argument('--start_iter', default=0, type=int,
                     help='Resume training at this iter')
+parser.add_argument('--gpus', default='0', type=str,
+                    help='GPUs to run on')
 parser.add_argument('--num_workers', default=4, type=int,
                     help='Number of workers used in dataloading')
 parser.add_argument('--cuda', default=True, type=str2bool,
@@ -59,23 +61,21 @@ parser.add_argument('--visdom', default=False, type=str2bool,
                     help='Use visdom for loss visualization')
 parser.add_argument('--save_folder', default='weights/',
                     help='Directory for saving checkpoint models')
-try:
-    args = parser.parse_args()
-except:
-    class ARGS:
-        batch_size = 4
-        resume = PATH_TO_WEIGHTS
-        start_iter = 0
-        num_workers = 4
-        cuda = True
-        lr = 1e-4
-        momentum = 0.9
-        weight_decay = 5e-4
-        gamma = 0.1
-        save_folder = 'weights/'
-    args = ARGS()
+args = parser.parse_args()
 
-torch.set_default_tensor_type('torch.cuda.FloatTensor')
+if torch.cuda.is_available():
+    if args.cuda:
+        torch.set_default_tensor_type('torch.cuda.FloatTensor')
+    if not args.cuda:
+        print("WARNING: It looks like you have a CUDA device, but aren't " +
+              "using CUDA.\nRun with --cuda for optimal training speed.")
+        torch.set_default_tensor_type('torch.FloatTensor')
+else:
+    torch.set_default_tensor_type('torch.FloatTensor')
+
+if torch.cuda.is_available() and args.cuda:
+    os.environ['CUDA_VISIBLE_DEVICES'] = args.gpus
+
 
 def laplace_diag():
     cfg = kitti_config
@@ -85,8 +85,8 @@ def laplace_diag():
 
 
     ssd_net = build_ssd('train', cfg['min_dim'], cfg['num_classes'])            # initialize SSD
-    try: weight_path = args.resume
-    except: weight_path = args['resume']
+    weight_path = args.resume
+
     ssd_net.load_weights(weight_path)
     ssd_net.cuda()
     net = ssd_net
@@ -108,7 +108,6 @@ def laplace_diag():
     batch_iterator = iter(data_loader)
     criterion = MultiBoxLoss(cfg['num_classes'], 0.3, True, 0, True, 3, 0.5,
                              False, args.cuda)
-    colors = plt.cm.hsv(np.linspace(0, 1, 9)).tolist()
 
     hessian_direc   = os.path.join('weights/')
     hessian_filename= os.path.join('weights/diag.obj')
@@ -144,7 +143,7 @@ def laplace_diag():
         pickle.dump(estimator, file_pi)
         print('Hessian saved.')
     else:
-        print('Hessian already exists!')
+        print('Hessian file',hessian_filename,'already exists!')
 
 if __name__ == '__main__':
     laplace_diag()

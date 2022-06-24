@@ -1,4 +1,5 @@
 """
+Taken from https://github.com/miyamotok0105/pytorch_handbook/blob/master/chapter7/ssd.py
 Copyright (c) 2017 Max deGroot, Ellis Brown
 Released under the MIT license
 https://github.com/amdegroot/ssd.pytorch
@@ -8,9 +9,6 @@ Updated by: Takuya Mouri
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-# handbook
-# from torch.autograd import Variable
-# handbook
 from layers import *
 from data import voc, coco, kitti_config
 import os
@@ -41,15 +39,11 @@ class SSD(nn.Module):
         self.cfg = (coco, voc)[num_classes == 21]
         if num_classes == 9: self.cfg = kitti_config
         self.priorbox = PriorBox(self.cfg)
-        # handbook
-        # self.priors = Variable(self.priorbox.forward(), volatile=True)
         self.priors = self.priorbox.forward()
-        # handbook
         self.size = size
 
         # SSD network
         self.vgg = nn.ModuleList(base)
-        # Layer learns to scale the l2 normalized features from conv4_3
         self.L2Norm = L2Norm(512, 20)
         self.extras = nn.ModuleList(extras)
         self.loc = nn.ModuleList(head[0])
@@ -57,8 +51,6 @@ class SSD(nn.Module):
 
         if phase == 'test':
             self.softmax = nn.Softmax(dim=-1)
-            # PyTorch1.5.0 support new-style autograd function
-            # self.detect = Detect(num_classes, 0, 200, 0.01, 0.45)
             self.detect = Detect()
 
         if phase == 'bnn':
@@ -113,13 +105,6 @@ class SSD(nn.Module):
         conf = torch.cat([o.view(o.size(0), -1) for o in conf], 1)
 
         if self.phase == 'test':
-            # # PyTorch1.5.0 support new-style autograd function
-            # output = self.detect.apply(self.num_classes, 0, 200, 0.01, 0.45,
-            #     loc.view(loc.size(0), -1, 4),                   # loc preds
-            #     self.softmax(conf.view(conf.size(0), -1,
-            #                  self.num_classes)),                # conf preds
-            #     self.priors.type(type(x.data))                  # default boxes
-            # )
             loc_data = loc.view(loc.size(0), -1, 4)
             conf_data = self.softmax(conf.view(conf.size(0), -1,self.num_classes))
             prior_data = self.priors.type(type(x.data))
@@ -129,7 +114,6 @@ class SSD(nn.Module):
             output = torch.zeros(num, self.num_classes, 200, 5)
             conf_preds = conf_data.view(num, num_priors,
                                         self.num_classes).transpose(2, 1)
-
 
             # Decode predictions into bboxes
             for i in range(num):
@@ -172,7 +156,7 @@ class SSD(nn.Module):
                                  map_location=lambda storage, loc: storage))
             print('Finished!')
         else:
-            print('Sorry only .pth and .pkl files supported.')
+            print('Only pth and pkl files supported.')
 
     def conf_softmax(self,x):
         sources = list()

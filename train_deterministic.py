@@ -1,16 +1,4 @@
-from cv2 import transform
-from numpy.core.fromnumeric import diagonal
-from tqdm.std import tqdm
-from data.kitti import KittiDetection
-from data import *
-from utils.augmentations import SSDAugmentation
-from layers.modules import MultiBoxLoss
-from ssd import build_ssd
 import os
-
-os.environ['CUDA_VISIBLE_DEVICES'] = '4,5,6,7'
-DEVICE_LIST = [0,1,2,3]
-
 import sys
 import time
 import torch
@@ -20,15 +8,19 @@ import torch.optim as optim
 import torch.backends.cudnn as cudnn
 import torch.nn.init as init
 import torch.utils.data as data
-import torchvision
-import numpy as np
 import argparse
 import urllib
 
+from data.kitti import KittiDetection
+from data import *
+from utils.augmentations import SSDAugmentation
+from layers.modules import MultiBoxLoss
+from ssd import build_ssd
+
+# helper function
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
-PATH_TO_WEIGHTS = 'weights/KITTI_30000.pth'
 ROOT = os.path.join('data')
 
 parser = argparse.ArgumentParser(
@@ -46,6 +38,8 @@ parser.add_argument('--resume', default='weights/KITTI_30000.pth', type=str, #'w
                     help='Checkpoint state_dict file to resume training from')
 parser.add_argument('--start_iter', default=0, type=int,
                     help='Resume training at this iter')
+parser.add_argument('--gpus', default='0', type=str,
+                    help='GPUs to run on')
 parser.add_argument('--num_workers', default=4, type=int,
                     help='Number of workers used in dataloading')
 parser.add_argument('--cuda', default=True, type=str2bool,
@@ -62,7 +56,6 @@ parser.add_argument('--save_folder', default='weights/',
                     help='Directory for saving checkpoint models')
 args = parser.parse_args()
 
-
 if torch.cuda.is_available():
     if args.cuda:
         torch.set_default_tensor_type('torch.cuda.FloatTensor')
@@ -73,6 +66,9 @@ if torch.cuda.is_available():
 else:
     torch.set_default_tensor_type('torch.FloatTensor')
 
+if torch.cuda.is_available() and args.cuda:
+    os.environ['CUDA_VISIBLE_DEVICES'] = args.gpus
+
 if not os.path.exists(args.save_folder):
     os.mkdir(args.save_folder)
 
@@ -81,23 +77,17 @@ def train():
     if args.dataset == 'KITTI':
 
         cfg = kitti_config
-        # dataset = torchvision.datasets.kitti(KITTI_ROOT,
-        #                 transforms=SSDAugmentation(cfg['min_dim'],MEANS),
-        #                 download = True)
 
         dataset = KittiDetection(root=ROOT,
                                  transform=SSDAugmentation(cfg['min_dim'],
                                                           MEANS))
     
-
-    # build_ssd => SSD => using self.vgg to build network
-    # min_dim == 300
     ssd_net = build_ssd('train', cfg['min_dim'], cfg['num_classes'])
     net = ssd_net
 
     if args.cuda and torch.cuda.is_available():
         # speed up using multiple GPUs
-        net = torch.nn.DataParallel(ssd_net,device_ids=DEVICE_LIST)
+        net = torch.nn.DataParallel(ssd_net)
         cudnn.benchmark = True
 
     if args.resume:

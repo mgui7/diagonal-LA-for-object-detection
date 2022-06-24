@@ -1,31 +1,21 @@
-from layers.functions.detection import Detect
-from data.kitti import KittiDetection
-from data import *
-from utils.augmentations import SSDAugmentation
-from layers.modules import MultiBoxLoss
-from ssd import build_ssd
 import os
-os.environ['CUDA_VISIBLE_DEVICES'] = '4'
-DEVICE_LIST = [0]
-
-import sys
 import time
 import torch
 from torch.autograd import Variable
 import torch.nn as nn
-import torch.optim as optim
-import torch.backends.cudnn as cudnn
-import torch.nn.init as init
-import torch.utils.data as data
 import numpy as np
 import argparse
-from scipy.linalg import block_diag
-import tqdm
 import pickle
 from matplotlib import pyplot as plt
-from data import KITTI_CLASSES as labels
 import random
 
+from layers.functions.detection import Detect
+from data.kitti import KittiDetection
+from data import *
+from ssd import build_ssd
+from data import KITTI_CLASSES as labels
+
+# helper function
 def str2bool(v):
     return v.lower() in ("yes", "true", "t", "1")
 
@@ -47,6 +37,8 @@ parser.add_argument('--resume', default= PATH_TO_WEIGHTS, type=str,
                     help='Checkpoint state_dict file to resume training from')
 parser.add_argument('--start_iter', default=0, type=int,
                     help='Resume training at this iter')
+parser.add_argument('--gpus', default='0', type=str,
+                    help='GPUs to run on')
 parser.add_argument('--num_workers', default=4, type=int,
                     help='Number of workers used in dataloading')
 parser.add_argument('--cuda', default=True, type=str2bool,
@@ -63,23 +55,20 @@ parser.add_argument('--visdom', default=False, type=str2bool,
                     help='Use visdom for loss visualization')
 parser.add_argument('--save_folder', default='weights/',
                     help='Directory for saving checkpoint models')
-try:
-    args = parser.parse_args()
-except:
-    class ARGS:
-        batch_size = 4
-        resume = PATH_TO_WEIGHTS
-        start_iter = 0
-        num_workers = 4
-        cuda = True
-        lr = 1e-4
-        momentum = 0.9
-        weight_decay = 5e-4
-        gamma = 0.1
-        save_folder = 'weights/'
-    args = ARGS()
+args = parser.parse_args()
 
-torch.set_default_tensor_type('torch.cuda.FloatTensor')
+if torch.cuda.is_available():
+    if args.cuda:
+        torch.set_default_tensor_type('torch.cuda.FloatTensor')
+    if not args.cuda:
+        print("WARNING: It looks like you have a CUDA device, but aren't " +
+              "using CUDA.\nRun with --cuda for optimal training speed.")
+        torch.set_default_tensor_type('torch.FloatTensor')
+else:
+    torch.set_default_tensor_type('torch.FloatTensor')
+
+if torch.cuda.is_available() and args.cuda:
+    os.environ['CUDA_VISIBLE_DEVICES'] = args.gpus
 
 def eval_unvertainty_diag(model, x, H, diag, boundary=False):
     threshold = 0.5
@@ -126,20 +115,13 @@ def eval_unvertainty_diag(model, x, H, diag, boundary=False):
 
     return out[1:], uncertainties
 
-def test_bnn(num_iterations = 40):
+def test_bnn(num_iterations = 10):
     cfg = kitti_config
     ssd_net = build_ssd('train', cfg['min_dim'], cfg['num_classes'])            # initialize SSD
-    try: weight_path = args.resume
-    except: weight_path = args['resume']
+    weight_path = args.resume
     ssd_net.load_weights(weight_path)
     ssd_net.cuda()
     net = ssd_net
-
-    if args.cuda and torch.cuda.is_available():
-        # speed up using multiple GPUs
-        # net = torch.nn.DataParallel(ssd_net,device_ids=DEVICE_LIST)
-        cudnn.benchmark = True
-        net.cuda()
 
     hessian_filename= os.path.join('weights/diag.obj')
 
@@ -149,9 +131,9 @@ def test_bnn(num_iterations = 40):
     print('Finished!')
 
     tic = time.time()
-    for iteration in range(num_iterations):
+    for _ in range(num_iterations):
         testset = KittiDetection(root=ROOT)
-        img_id = random.randint(0,5000) #iteration
+        img_id = random.randint(0,len(testset)-1)
         image = testset.pull_image(img_id)
 
         # Resize
