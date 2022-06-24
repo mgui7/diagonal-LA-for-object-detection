@@ -6,7 +6,7 @@ ITSC 2022
 
 **PyTorch Implementation of Laplace Approximation for Real-time Uncertainty Estimation in Object Detection**
 
-[Ming Gui](https://github.com/mgui7), [Tianming Qiu](https://github.com/TianmingQiu), Fridolin Bauer, [Shen Hao](https://www.fortiss.org/forschung/projekte/detail/machine-learning-lab)
+[Ming Gui](https://github.com/mgui7), [Tianming Qiu](https://github.com/TianmingQiu), Fridolin Bauer, [Hao Shen](https://www.fortiss.org/forschung/projekte/detail/machine-learning-lab)
 <br />  
 ## Requirements
 Clone repository and install the corresponding python dependencies using PIP
