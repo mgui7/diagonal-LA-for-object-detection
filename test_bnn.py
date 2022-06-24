@@ -55,6 +55,10 @@ parser.add_argument('--visdom', default=False, type=str2bool,
                     help='Use visdom for loss visualization')
 parser.add_argument('--save_folder', default='weights/',
                     help='Directory for saving checkpoint models')
+parser.add_argument('--boundary', default=False, type=str2bool,
+                    help='Output the boundary uncertainty values')
+parser.add_argument('--images', default=10, type=int,
+                    help='Number of images for output')
 args = parser.parse_args()
 
 if torch.cuda.is_available():
@@ -70,7 +74,7 @@ else:
 if torch.cuda.is_available() and args.cuda:
     os.environ['CUDA_VISIBLE_DEVICES'] = args.gpus
 
-def eval_unvertainty_diag(model, x, H, diag, boundary=False):
+def eval_unvertainty_diag(model, x, H, diag, boundary):
     threshold = 0.5
     x = Variable(x.cuda(), requires_grad=True)
     model.softmax = nn.Softmax(dim=-1)
@@ -115,7 +119,7 @@ def eval_unvertainty_diag(model, x, H, diag, boundary=False):
 
     return out[1:], uncertainties
 
-def test_bnn(num_iterations = 10):
+def test_bnn(num_iterations = 10, boundary=False):
     cfg = kitti_config
     ssd_net = build_ssd('train', cfg['min_dim'], cfg['num_classes'])            # initialize SSD
     weight_path = args.resume
@@ -159,7 +163,7 @@ def test_bnn(num_iterations = 10):
                 h.append(torch.flatten(H_i))
         H = torch.cat(h, dim=0)
 
-        mean_predictions, uncertainty = eval_unvertainty_diag(net, xx, H, diag)
+        mean_predictions, uncertainty = eval_unvertainty_diag(net, xx, H, diag, boundary)
         mean_predictions = mean_predictions.detach()
         uncertainty = uncertainty.detach() ** 0.5
 
@@ -199,4 +203,5 @@ def test_bnn(num_iterations = 10):
     print('Average Bayesian inference duration:',  "{:.2f}s".format((toc-tic) / num_iterations))
 
 if __name__ == '__main__':
-    test_bnn(1)
+    print(args.images, args.boundary)
+    test_bnn(args.images, args.boundary)
